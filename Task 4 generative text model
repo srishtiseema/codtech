@@ -1,0 +1,34 @@
+import torch
+from transformers import GPT2LMHeadModel, GPT2Tokenizer
+
+# Load pre-trained GPT-2 model and tokenizer
+model_name = "gpt2"  # You can also try "gpt2-medium", "gpt2-large", or "gpt2-xl"
+tokenizer = GPT2Tokenizer.from_pretrained(model_name)
+model = GPT2LMHeadModel.from_pretrained(model_name)
+
+# Move model to GPU if available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
+
+def generate_text(prompt, max_length=150, temperature=0.7, top_k=50, top_p=0.9):
+    """Generates text using GPT-2 based on the input prompt."""
+    input_ids = tokenizer.encode(prompt, return_tensors="pt").to(device)
+    
+    output = model.generate(
+        input_ids,
+        max_length=max_length,
+        temperature=temperature,
+        top_k=top_k,
+        top_p=top_p,
+        do_sample=True
+    )
+    
+    generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
+    return generated_text
+
+# Example usage
+user_prompt = input("Enter a prompt for text generation: ").strip()
+generated_paragraph = generate_text(user_prompt)
+
+print("\nGenerated Text:\n")
+print(generated_paragraph)
