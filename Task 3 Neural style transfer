@@ -1,0 +1,120 @@
+import torch
+import torch.optim as optim
+import torchvision.transforms as transforms
+from torchvision import models
+from PIL import Image
+import matplotlib.pyplot as plt
+
+# Check for GPU availability
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
+# Image loader function
+def load_image(image_path, max_size=400):
+    image = Image.open(image_path).convert('RGB')
+    
+    # Resize if larger than max_size
+    size = max_size if max(image.size) > max_size else max(image.size)
+    
+    transform = transforms.Compose([
+        transforms.Resize((size, size)),
+        transforms.ToTensor()
+    ])
+    
+    image = transform(image)[:3, :, :].unsqueeze(0)
+    return image.to(device)
+
+# Show image function
+def imshow(tensor, title=None):
+    image = tensor.cpu().clone().detach()
+    image = image.squeeze(0)
+    image = transforms.ToPILImage()(image)
+    plt.imshow(image)
+    if title:
+        plt.title(title)
+    plt.show()
+
+# Load pre-trained VGG19 model
+vgg = models.vgg19(pretrained=True).features.to(device).eval()
+
+# Define layers for content and style extraction
+content_layers = ['conv_4']
+style_layers = ['conv_1', 'conv_2', 'conv_3', 'conv_4', 'conv_5']
+
+# Function to extract features
+def get_features(image, model):
+    features = {}
+    x = image
+    layer_names = {
+        '0': 'conv_1', '5': 'conv_2', '10': 'conv_3',
+        '19': 'conv_4', '28': 'conv_5'
+    }
+    
+    for name, layer in model._modules.items():
+        x = layer(x)
+        if name in layer_names:
+            features[layer_names[name]] = x
+    return features
+
+
+def gram_matrix(tensor):
+    _, d, h, w = tensor.size()
+    tensor = tensor.view(d, h * w)
+    gram = torch.mm(tensor, tensor.t())
+    return gram
+
+content_img_path = input("Enter the content image path: ").strip()
+style_img_path = input("Enter the style image path: ").strip()
+
+content_image = load_image(content_img_path)
+style_image = load_image(style_img_path)
+
+
+plt.figure(figsize=(10, 5))
+plt.subplot(1, 2, 1)
+imshow(content_image, "Content Image")
+plt.subplot(1, 2, 2)
+imshow(style_image, "Style Image")
+
+
+content_features = get_features(content_image, vgg)
+style_features = get_features(style_image, vgg)
+
+
+style_grams = {layer: gram_matrix(style_features[layer]) for layer in style_features}
+
+
+target_image = content_image.clone().requires_grad_(True).to(device)
+
+optimizer = optim.Adam([target_image], lr=0.003)
+style_weight = 1e6
+content_weight = 1
+
+epochs = 300
+for epoch in range(epochs):
+    target_features = get_features(target_image, vgg)
+    
+    content_loss = torch.mean((target_features['conv_4'] - content_features['conv_4'])**2)
+
+    style_loss = 0
+    for layer in style_layers:
+        target_gram = gram_matrix(target_features[layer])
+        style_gram = style_grams[layer]
+        layer_style_loss = torch.mean((target_gram - style_gram)**2)
+        style_loss += layer_style_loss / (target_gram.shape[0] ** 2)
+
+    total_loss = content_weight * content_loss + style_weight * style_loss
+    
+    optimizer.zero_grad()
+    total_loss.backward()
+    optimizer.step()
+    
+    if epoch % 50 == 0:
+        print(f"Epoch {epoch}/{epochs}, Loss: {total_loss.item()}")
+
+imshow(target_image, "Styled Image")
+
+
+output_path = "stylized_image.jpg"
+transforms.ToPILImage()(target_image.cpu().squeeze()).save(output_path)
+print(f"✅ Styled image saved as {output_path}")
