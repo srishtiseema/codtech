@@ -1,0 +1,40 @@
+import os
+import subprocess
+
+
+try:
+    from transformers import pipeline
+except ImportError:
+    print("Installing required libraries...")
+    subprocess.check_call(["pip", "install", "transformers", "torch", "nltk"])
+    from transformers import pipeline
+
+
+summarizer = pipeline("summarization")
+
+def summarize_text(text, max_length=150, min_length=50):
+    """
+    Summarizes the input text using a pre-trained NLP model.
+
+    :param text: Input text to summarize
+    :param max_length: Maximum length of the summary
+    :param min_length: Minimum length of the summary
+    :return: Summarized text
+    """
+    summary = summarizer(text, max_length=max_length, min_length=min_length, do_sample=False)
+    return summary[0]['summary_text']
+
+if __name__ == "__main__":
+    print("📝 Text Summarization Tool 📝")
+    print("Enter a long article or paragraph, and I will summarize it for you.")
+
+  
+    input_text = input("\nEnter the text to summarize:\n")
+
+    
+    if len(input_text) > 50:  # Ensuring minimum text length for meaningful summarization
+        summary_result = summarize_text(input_text)
+        print("\n🔹 Original Text:\n", input_text)
+        print("\n✅ Generated Summary:\n", summary_result)
+    else:
+        print("\n⚠️ Please enter a longer text for summarization.")
