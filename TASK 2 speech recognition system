@@ -1,0 +1,84 @@
+import os
+import subprocess
+
+
+try:
+    import speech_recognition as sr
+    from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
+    import torch
+    import librosa
+except ImportError:
+    print("Installing required libraries...")
+    subprocess.check_call(["pip", "install", "speechrecognition", "transformers", "torch", "librosa"])
+    import speech_recognition as sr
+    from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
+    import torch
+    import librosa
+
+
+recognizer = sr.Recognizer()
+
+def recognize_speech(audio_file):
+    """
+    Converts speech from an audio file into text using a pre-trained model.
+
+    :param audio_file: Path to the audio file
+    :return: Transcribed text
+    """
+    try:
+      
+        with sr.AudioFile(audio_file) as source:
+            print("Processing audio...")
+            audio_data = recognizer.record(source)
+        
+        
+        print("Using SpeechRecognition API...")
+        text = recognizer.recognize_google(audio_data)
+        return text
+
+    except sr.UnknownValueError:
+        print("SpeechRecognition could not understand the audio.")
+        return None
+    except sr.RequestError:
+        print("SpeechRecognition API is unavailable. Using Wav2Vec2...")
+        return wav2vec_transcription(audio_file)
+
+def wav2vec_transcription(audio_file):
+    """
+    Converts speech from an audio file into text using Wav2Vec2.
+
+    :param audio_file: Path to the audio file
+    :return: Transcribed text
+    """
+    print("Processing with Wav2Vec2 model...")
+    
+    
+    model_name = "facebook/wav2vec2-large-960h"
+    processor = Wav2Vec2Processor.from_pretrained(model_name)
+    model = Wav2Vec2ForCTC.from_pretrained(model_name)
+
+    
+    audio, rate = librosa.load(audio_file, sr=16000)
+    input_values = processor(audio, sampling_rate=rate, return_tensors="pt").input_values
+
+    
+    with torch.no_grad():
+        logits = model(input_values).logits
+    predicted_ids = torch.argmax(logits, dim=-1)
+
+    
+    transcription = processor.batch_decode(predicted_ids)[0]
+    return transcription
+
+if __name__ == "__main__":
+    print("🎤 Speech Recognition System 🎤")
+    audio_path = input("Enter the path of the audio file (WAV format recommended): ").strip()
+
+    if os.path.exists(audio_path):
+        transcribed_text = recognize_speech(audio_path)
+        if transcribed_text:
+            print("\n✅ Transcribed Text:\n", transcribed_text)
+        else:
+            print("\n❌ Could not transcribe the audio.")
+    else:
+        print("\n⚠️ File not found! Please provide a valid audio file path.")
